@@ -96,6 +96,7 @@
             border-radius: 5px;
         }
     </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <h1>Recording Audio for Subject: {{ subject }}</h1>
@@ -168,6 +169,14 @@
                     const result = await response.json();
                     updateProgress(100);
                     displayResults(result);
+                    
+                    // Get and display spectrogram
+                    const spectrogramResponse = await fetch('/get_audio_spectrum', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const spectrogramData = await spectrogramResponse.json();
+                    displaySpectrogram(spectrogramData);
                 } catch (error) {
                     displayError("An error occurred while processing the audio.");
                 } finally {
@@ -213,30 +222,6 @@
                 const result = await response.json();
                 updateProgress(100);
                 displayResults(result);
-            } catch (error) {
-                displayError("An error occurred while processing the audio.");
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
-        };
-        async function processAudio(audioBlob) {
-            const formData = new FormData();
-            formData.append('audio', audioBlob);
-
-            updateProgress(0);
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('results').innerHTML = '';
-
-            try {
-                updateProgress(25);
-                const response = await fetch('/process_audio', {
-                    method: 'POST',
-                    body: formData
-                });
-                updateProgress(75);
-                const result = await response.json();
-                updateProgress(100);
-                displayResults(result);
                 
                 // Get and display spectrogram
                 const spectrogramResponse = await fetch('/get_audio_spectrum', {
@@ -250,7 +235,7 @@
             } finally {
                 document.getElementById('loading').style.display = 'none';
             }
-        }
+        };
 
         function displayResults(result) {
             const resultsDiv = document.getElementById('results');
@@ -333,24 +318,6 @@
                 <p>Topic Relevance: ${result.topic_relevance.toFixed(2)}%</p>
             `;
             comparisonDiv.appendChild(newCard);
-        }1
-
-        function displayResults(result) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-
-            if (result.error) {
-                resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
-            } else {
-                const highlightedText = highlightKeywords(result.text, result.dataset_keywords);
-                resultsDiv.innerHTML = `
-                    <h2>Results:</h2>
-                    <p><strong>Audio Text:</strong> ${highlightedText}</p>
-                    <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
-                `;
-                updateAccuracyMeter(result.accuracy);
-                displayWikipediaPreview(result.dataset_content);
-            }
         }
 
         function displayError(message) {

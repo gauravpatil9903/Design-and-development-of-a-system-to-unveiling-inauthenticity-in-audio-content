@@ -22,13 +22,6 @@ import spacy
 import numpy as np
 from scipy.signal import spectrogram
 
-from fuzzywuzzy import fuzz
-
-from transformers import pipeline
-import spacy
-import librosa
-import numpy as np
-
 nlp = spacy.load('en_core_web_sm')
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")  # Specify the model explicitly
 
@@ -41,7 +34,6 @@ app.secret_key = 'supersecretkey'  # Required for session management
 # =====================
 
 def fetch_relevant_wikipedia_data(subject):
-    
     try:
         search_results = wikipedia.search(subject)
         if search_results:
@@ -185,7 +177,7 @@ def index():
 
 @app.route('/audio_record')
 def audio_record():
-    return render_template('audio_record.html')
+    return render_template('audio_record.html', subject=session.get('subject'))
 
 @app.route('/proceed', methods=['POST'])
 def proceed():
@@ -315,26 +307,40 @@ def generate_improvement_suggestions(accuracy, audio_keywords, dataset_keywords)
 @app.route('/get_audio_spectrum', methods=['POST'])
 def get_audio_spectrum():
     audio_file = request.files.get('audio')
+    
     if not audio_file:
         return jsonify({"error": "No audio file received"}), 400
 
     try:
+        # Convert the audio file to WAV format using pydub
         audio_file.seek(0)
         audio = AudioSegment.from_file(io.BytesIO(audio_file.read()))
-        samples = np.array(audio.get_array_of_samples())
+
+        # Ensure the audio file is in mono and downsample to a lower rate if necessary
+        audio = audio.set_channels(1)
         
-        # Calculate spectrogram
-        f, t, Sxx = spectrogram(samples, audio.frame_rate)
+        # Convert audio to raw data for spectrogram analysis
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / (1 << (8 * audio.sample_width - 1))
         
-        # Convert to dB scale
+        # Check if the audio is non-empty
+        if samples.size == 0:
+            raise ValueError("The audio file is empty or couldn't be processed correctly.")
+
+        # Calculate the spectrogram (adjust frame rate or other parameters as needed)
+        f, t, Sxx = spectrogram(samples, fs=audio.frame_rate, nperseg=1024)
+        
+        # Convert the spectrogram to dB scale
         Sxx_db = 10 * np.log10(Sxx + 1e-10)  # Add small value to avoid log(0)
-        
+
+        # Return the spectrogram data as JSON
         return jsonify({
             "frequencies": f.tolist(),
             "times": t.tolist(),
             "spectrogram": Sxx_db.tolist()
         }), 200
+
     except Exception as e:
+        # Capture and log the specific error to help identify the problem
         print(f"Error processing audio spectrum: {str(e)}")
         return jsonify({"error": "An error occurred while processing the audio spectrum", "details": str(e)}), 500
 
