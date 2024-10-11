@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Recording</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f4f4f4;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            margin: 10px;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        #loading {
+            display: none;
+            font-size: 18px;
+            color: #007bff;
+        }
+        #error-message {
+            color: red;
+        }
+        #progressBar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        #progressBar div {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 10px;
+            width: 0;
+            transition: width 0.5s;
+        }
+        #visualizer {
+            width: 100%;
+            height: 100px;
+            background-color: #000;
+            margin-top: 10px;
+        }
+        #audioPlayback {
+            margin-top: 10px;
+        }
+        .keyword {
+            background-color: yellow;
+            font-weight: bold;
+        }
+        #accuracyMeter {
+            width: 200px;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        #accuracyMeter div {
+            height: 100%;
+            border-radius: 10px;
+            width: 0;
+            transition: width 0.5s, background-color 0.5s;
+        }
+        #wikipediaPreview {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #spectrogram, #topicRelevanceGraph, #timeAlignedResults {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+        }
+        #comparisonResults {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        .comparisonCard {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Recording Audio for Subject: {{ subject }}</h1>
+    <button id="recordButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <div>
+        <h3>Or upload an audio file:</h3>
+        <input type="file" id="audioFileInput" accept=".mp3, .wav, .m4a">
+        <button id="uploadButton">Upload Audio File</button>
+    </div>
+    <div id="progressBar"><div></div></div>
+    <canvas id="visualizer"></canvas>
+    <div id="spectrogram"></div>
+    <audio id="audioPlayback" controls style="display: none;"></audio>
+    <div id="loading">Processing your audio...</div>
+    <div id="results"></div>
+    <div id="accuracyMeter"><div></div></div>
+    <div id="topicRelevanceGraph"></div>
+    <div id="timeAlignedResults"></div>
+    <div id="improvementSuggestions"></div>
+    <div id="wikipediaPreview"></div>
+    <div id="comparisonResults"></div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioContext;
+        let analyser;
+        let canvas;
+        let canvasCtx;
+
+        document.getElementById('recordButton').onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+
+            canvas = document.getElementById('visualizer');
+            canvasCtx = canvas.getContext('2d');
+
+            visualize();
+
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                document.getElementById('audioPlayback').src = audioUrl;
+                document.getElementById('audioPlayback').style.display = 'block';
+
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+
+                updateProgress(0);
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('results').innerHTML = '';
+
+                try {
+                    updateProgress(25);
+                    const response = await fetch('/process_audio', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    updateProgress(75);
+                    const result = await response.json();
+                    updateProgress(100);
+                    displayResults(result);
+                } catch (error) {
+                    displayError("An error occurred while processing the audio.");
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            };
+
+            mediaRecorder.start();
+            document.getElementById('recordButton').disabled = true;
+            document.getElementById('stopButton').disabled = false;
+            audioChunks = [];
+        };
+
+        document.getElementById('stopButton').onclick = () => {
+            mediaRecorder.stop();
+            document.getElementById('recordButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+        };
+
+        document.getElementById('uploadButton').onclick = async () => {
+            const fileInput = document.getElementById('audioFileInput');
+            const audioFile = fileInput.files[0];
+
+            if (!audioFile) {
+                displayError("Please select an audio file.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('audio', audioFile);
+
+            updateProgress(0);
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').innerHTML = '';
+
+            try {
+                updateProgress(25);
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                updateProgress(75);
+                const result = await response.json();
+                updateProgress(100);
+                displayResults(result);
+            } catch (error) {
+                displayError("An error occurred while processing the audio.");
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        };
+        async function processAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+
+            updateProgress(0);
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').innerHTML = '';
+
+            try {
+                updateProgress(25);
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                updateProgress(75);
+                const result = await response.json();
+                updateProgress(100);
+                displayResults(result);
+                
+                // Get and display spectrogram
+                const spectrogramResponse = await fetch('/get_audio_spectrum', {
+                    method: 'POST',
+                    body: formData
+                });
+                const spectrogramData = await spectrogramResponse.json();
+                displaySpectrogram(spectrogramData);
+            } catch (error) {
+                displayError("An error occurred while processing the audio.");
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (result.error) {
+                resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
+            } else {
+                const highlightedText = highlightKeywords(result.text, result.dataset_keywords);
+                resultsDiv.innerHTML = `
+                    <h2>Results:</h2>
+                    <p><strong>Audio Text:</strong> ${highlightedText}</p>
+                    <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
+                `;
+                updateAccuracyMeter(result.accuracy);
+                displayWikipediaPreview(result.dataset_content);
+                displayTopicRelevanceGraph(result.topic_relevance);
+                displayTimeAlignedResults(result.time_aligned_results);
+                displayImprovementSuggestions(result.improvement_suggestions);
+                updateComparisonResults(result);
+            }
+        }
+
+        function displaySpectrogram(data) {
+            const spectrogramDiv = document.getElementById('spectrogram');
+            Plotly.newPlot(spectrogramDiv, [{
+                z: data.spectrogram,
+                x: data.times,
+                y: data.frequencies,
+                type: 'heatmap',
+                colorscale: 'Viridis'
+            }], {
+                title: 'Audio Spectrogram',
+                xaxis: {title: 'Time'},
+                yaxis: {title: 'Frequency'}
+            });
+        }
+
+        function displayTopicRelevanceGraph(relevance) {
+            const graphDiv = document.getElementById('topicRelevanceGraph');
+            Plotly.newPlot(graphDiv, [{
+                x: ['Topic Relevance'],
+                y: [relevance],
+                type: 'bar'
+            }], {
+                title: 'Topic Relevance',
+                yaxis: {range: [0, 100]}
+            });
+        }
+
+        function displayTimeAlignedResults(results) {
+            const timeAlignedDiv = document.getElementById('timeAlignedResults');
+            const relevantWords = results.filter(r => r.relevance > 0);
+            Plotly.newPlot(timeAlignedDiv, [{
+                x: relevantWords.map(r => (r.start_time + r.end_time) / 2),
+                y: relevantWords.map(r => r.relevance),
+                text: relevantWords.map(r => r.word),
+                mode: 'markers+text',
+                type: 'scatter'
+            }], {
+                title: 'Time-Aligned Relevance',
+                xaxis: {title: 'Time (s)'},
+                yaxis: {title: 'Relevance'}
+            });
+        }
+
+        function displayImprovementSuggestions(suggestions) {
+            const suggestionsDiv = document.getElementById('improvementSuggestions');
+            suggestionsDiv.innerHTML = '<h3>Improvement Suggestions:</h3><ul>' + 
+                suggestions.map(s => `<li>${s}</li>`).join('') + '</ul>';
+        }
+
+        function updateComparisonResults(result) {
+            const comparisonDiv = document.getElementById('comparisonResults');
+            const newCard = document.createElement('div');
+            newCard.className = 'comparisonCard';
+            newCard.innerHTML = `
+                <h3>Attempt ${comparisonDiv.childElementCount + 1}</h3>
+                <p>Accuracy: ${result.accuracy.toFixed(2)}%</p>
+                <p>Topic Relevance: ${result.topic_relevance.toFixed(2)}%</p>
+            `;
+            comparisonDiv.appendChild(newCard);
+        }1
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (result.error) {
+                resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
+            } else {
+                const highlightedText = highlightKeywords(result.text, result.dataset_keywords);
+                resultsDiv.innerHTML = `
+                    <h2>Results:</h2>
+                    <p><strong>Audio Text:</strong> ${highlightedText}</p>
+                    <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
+                `;
+                updateAccuracyMeter(result.accuracy);
+                displayWikipediaPreview(result.dataset_content);
+            }
+        }
+
+        function displayError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<p id="error-message">${message}</p>`;
+        }
+
+        function updateProgress(percentage) {
+            const progressBar = document.getElementById('progressBar').firstChild;
+            progressBar.style.width = percentage + '%';
+        }
+
+        function visualize() {
+            const WIDTH = canvas.width;
+            const HEIGHT = canvas.height;
+
+            analyser.fftSize = 2048;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            function draw() {
+                const drawVisual = requestAnimationFrame(draw);
+
+                analyser.getByteTimeDomainData(dataArray);
+
+                canvasCtx.fillStyle = 'rgb(200, 200, 200)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = 'rgb(0, 0, 0)';
+
+                canvasCtx.beginPath();
+
+                const sliceWidth = WIDTH * 1.0 / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * HEIGHT / 2;
+
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                canvasCtx.stroke();
+            }
+
+            draw();
+        }
+
+        function highlightKeywords(text, keywords) {
+            let highlightedText = text;
+            keywords.forEach(keyword => {
+                const regex = new RegExp(keyword, 'gi');
+                highlightedText = highlightedText.replace(regex, match => `<span class="keyword">${match}</span>`);
+            });
+            return highlightedText;
+        }
+
+        function updateAccuracyMeter(accuracy) {
+            const meter = document.getElementById('accuracyMeter').firstChild;
+            meter.style.width = accuracy + '%';
+            if (accuracy < 50) {
+                meter.style.backgroundColor = 'red';
+            } else if (accuracy < 80) {
+                meter.style.backgroundColor = 'yellow';
+            } else {
+                meter.style.backgroundColor = 'green';
+            }
+        }
+
+        function displayWikipediaPreview(content) {
+            const previewDiv = document.getElementById('wikipediaPreview');
+            previewDiv.innerHTML = `
+                <h3>Wikipedia Preview:</h3>
+                <p>${content.substring(0, 300)}...</p>
+                <button onclick="toggleWikipediaPreview()">Show More</button>
+            `;
+        }
+
+        function toggleWikipediaPreview() {
+            const previewDiv = document.getElementById('wikipediaPreview');
+            const button = previewDiv.querySelector('button');
+            if (button.textContent === 'Show More') {
+                previewDiv.innerHTML = `
+                    <h3>Wikipedia Preview:</h3>
+                    <p>${content}</p>
+                    <button onclick="toggleWikipediaPreview()">Show Less</button>
+                `;
+            } else {
+                displayWikipediaPreview(content);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,207 +1,90 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Speech to Text</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Processing</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 0; 
-        }
-
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 0;
-            text-align: center;
-        }
-
-        main {
+            margin: 20px;
             padding: 20px;
+            background-color: #f4f4f4;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-
-        h1, h2 {
-            text-align: center;
-        }
-
         button {
-            background-color: #4CAF70;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            margin: 10px;
-            cursor: pointer;
+            padding: 10px 15px;
             font-size: 16px;
-            border-radius: 5px;
+            margin: 10px;
         }
-
-        button:disabled {
-            background-color: #ccc;
-        }
-
-        form {
-            text-align: center;
-            margin: 20px 0;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            
-        }
-
-        table, th, td {
-            border: 1px solid #ddd;
-        }
-
-        th, td {
-            padding: 10px;
-            text-align: left;
-        }
-
-        th {
-            background-color: #f2f2f2;
-            text-align: center;
-        }
-
-        p {
-            text-align: center;
-        }
-
-        #output {
-            font-weight: bold;
+        #results {
             margin-top: 20px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>System for unveiling inaunthenticity in audio content </h1>
-    </header>
-
-    <main>
-        <div style="text-align: center;">
-                <button onclick="startRecording()">Start Recording</button>
-                <button onclick="stopRecording()" disabled>Stop Recording</button>
-        </div>
-
-        <form id="uploadForm" enctype="multipart/form-data">
-            <input type="file" id="audioFile" name="file" accept="audio/*">
-            <button type="button" onclick="uploadAudio()">Upload Audio</button>
-        </form>
-
-        <h2>Output</h2>
-        <p id="output"></p>
-        <table id="keywordsTable">
-            <thead>
-                <tr>
-                    <th>Correct Keywords</th>
-                    <th>Matched Keywords</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td id="correctKeywords"></td>
-                    <td id="matchedKeywords"></td>
-                </tr>
-            </tbody>
-        </table>
-        <p id="accuracy"></p>
-        <p id="userParagraph"></p>
-    </main>
+    <h1>Record Audio and Process</h1>
+    <button id="recordButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <div id="results"></div>
 
     <script>
         let mediaRecorder;
         let audioChunks = [];
 
-        function startRecording() {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                    mediaRecorder.start();
-                    document.querySelector("button[onclick='stopRecording()']").disabled = false;
-                    document.querySelector("button[onclick='startRecording()']").disabled = true;
-                    
-                    mediaRecorder.addEventListener("dataavailable", event => {
-                        audioChunks.push(event.data);
-                    });
+        document.getElementById('recordButton').onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
 
-                    mediaRecorder.addEventListener("stop", () => {
-                        const audioBlob = new Blob(audioChunks, { 'type': 'audio/webm' });
-                        const reader = new FileReader();
-                        reader.readAsDataURL(audioBlob);
-                        reader.onloadend = () => {
-                            const base64data = reader.result;
-                            fetch('/process_audio', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ audio_data: base64data })
-                            })
-                            .then(response => {
-                                if (!response.ok) {
-                                    return response.json().then(error => { throw new Error(error.error); });
-                                }
-                                return response.json();
-                            })
-                            .then(data => {
-                                if (data.error) {
-                                    document.getElementById("output").innerText = data.error;
-                                } else {
-                                    document.getElementById("output").innerText = data.match_result ? "The user-provided information is relevant." : "The user-provided information does not match.";
-                                    document.getElementById("correctKeywords").innerText = data.dataset_keywords.join(", ");
-                                    document.getElementById("matchedKeywords").innerText = data.user_keywords.join(", ");
-                                    document.getElementById("accuracy").innerText = `Information matched(%: ${data.accuracy.toFixed(2)}%`;
-                                }
-                            })
-                            .catch(error => {
-                                document.getElementById("output").innerText = `Error: ${error.message}`;
-                            });
-                        };
-                    });
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
                 });
-        }
 
-        function stopRecording() {
+                const result = await response.json();
+                displayResults(result);
+            };
+
+            mediaRecorder.start();
+            document.getElementById('recordButton').disabled = true;
+            document.getElementById('stopButton').disabled = false;
+            audioChunks = []; // Reset chunks
+        };
+
+        document.getElementById('stopButton').onclick = () => {
             mediaRecorder.stop();
-            document.querySelector("button[onclick='stopRecording()']").disabled = true;
-            document.querySelector("button[onclick='startRecording()']").disabled = false;
-            audioChunks = [];
-        }
+            document.getElementById('recordButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+        };
 
-        function uploadAudio() {
-            const audioFile = document.getElementById('audioFile').files[0];
-            const formData = new FormData();
-            formData.append('file', audioFile);
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
 
-            fetch('/upload_audio', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(error => { throw new Error(error.error); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    document.getElementById("output").innerText = data.error;
-                } else {
-                    document.getElementById("output").innerText = data.match_result ? "The user-provided information is relevant." : "The user-provided information does not match.";
-                    document.getElementById("correctKeywords").innerText = data.dataset_keywords.join(", ");
-                    document.getElementById("matchedKeywords").innerText = data.user_keywords.join(", ");
-                    document.getElementById("accuracy").innerText = `Information matched: ${data.accuracy.toFixed(2)}%`;
-                    document.getElementById("userParagraph").innerText = `Extracted Paragraph: ${data.user_paragraph}`;
-                }
-            })
-            .catch(error => {
-                document.getElementById("output").innerText = `Error: ${error.message}`;
-            });
+            if (result.error) {
+                resultsDiv.innerHTML = `<p style="color: red;">${result.error}</p>`;
+            } else {
+                resultsDiv.innerHTML = `
+                    <h2>Results:</h2>
+                    <p><strong>Matched Dataset:</strong> ${result.matched_dataset}</p>
+                    <p><strong>Keywords:</strong> ${result.keywords.join(', ')}</p>
+                    <p><strong>Similarity Score:</strong> ${result.similarity_score.toFixed(2)}</p>
+                `;
+            }
         }
     </script>
 </body>
