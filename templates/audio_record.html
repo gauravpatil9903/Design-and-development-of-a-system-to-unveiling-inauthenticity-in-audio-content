@@ -95,6 +95,17 @@
             padding: 10px;
             border-radius: 5px;
         }
+        #feedbackButtons {
+            margin-top: 20px;
+        }
+        #feedbackButtons button {
+            margin-right: 10px;
+        }
+        #processingTime {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #007bff;
+        }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -113,12 +124,17 @@
     <audio id="audioPlayback" controls style="display: none;"></audio>
     <div id="loading">Processing your audio...</div>
     <div id="results"></div>
+    
     <div id="accuracyMeter"><div></div></div>
     <div id="topicRelevanceGraph"></div>
     <div id="timeAlignedResults"></div>
     <div id="improvementSuggestions"></div>
     <div id="wikipediaPreview"></div>
     <div id="comparisonResults"></div>
+    <div id="feedbackButtons" style="display: none;">
+        <button id="relevantButton">Relevant</button>
+        <button id="notRelevantButton">Not Relevant</button>
+    </div>
 
     <script>
         let mediaRecorder;
@@ -127,6 +143,8 @@
         let analyser;
         let canvas;
         let canvasCtx;
+        let currentSubject = '{{ subject }}';
+        let currentContent = '';
 
         document.getElementById('recordButton').onclick = async () => {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -237,10 +255,40 @@
             }
         };
 
+        async function processAudio(formData) {
+            updateProgress(0);
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').innerHTML = '';
+
+            try {
+                updateProgress(25);
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                updateProgress(75);
+                const result = await response.json();
+                updateProgress(100);
+                displayResults(result);
+                
+                // Get and display spectrogram
+                const spectrogramResponse = await fetch('/get_audio_spectrum', {
+                    method: 'POST',
+                    body: formData
+                });
+                const spectrogramData = await spectrogramResponse.json();
+                displaySpectrogram(spectrogramData);
+            } catch (error) {
+                displayError("An error occurred while processing the audio.");
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
         function displayResults(result) {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
-
+        
             if (result.error) {
                 resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
             } else {
@@ -249,6 +297,11 @@
                     <h2>Results:</h2>
                     <p><strong>Audio Text:</strong> ${highlightedText}</p>
                     <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
+                    <p><strong>Processing Time:</strong> ${result.processing_time.toFixed(2)} seconds</p>
+                    <h3>Audio Keywords:</h3>
+                    <p>${result.audio_keywords.join(', ')}</p>
+                    <h3>Dataset Keywords:</h3>
+                    <p>${result.dataset_keywords.join(', ')}</p>
                 `;
                 updateAccuracyMeter(result.accuracy);
                 displayWikipediaPreview(result.dataset_content);
@@ -256,8 +309,14 @@
                 displayTimeAlignedResults(result.time_aligned_results);
                 displayImprovementSuggestions(result.improvement_suggestions);
                 updateComparisonResults(result);
+        
+                document.getElementById('feedbackButtons').style.display = 'block';
+                currentContent = result.dataset_content;
             }
         }
+
+
+        
 
         function displaySpectrogram(data) {
             const spectrogramDiv = document.getElementById('spectrogram');
@@ -412,13 +471,39 @@
             if (button.textContent === 'Show More') {
                 previewDiv.innerHTML = `
                     <h3>Wikipedia Preview:</h3>
-                    <p>${content}</p>
+                    <p>${currentContent}</p>
                     <button onclick="toggleWikipediaPreview()">Show Less</button>
                 `;
             } else {
-                displayWikipediaPreview(content);
+                displayWikipediaPreview(currentContent);
             }
         }
+
+        // New function to handle user feedback
+        async function submitFeedback(isRelevant) {
+            try {
+                const response = await fetch('/update_feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        subject: currentSubject,
+                        content: currentContent,
+                        is_relevant: isRelevant
+                    }),
+                });
+                const result = await response.json();
+                alert(result.message);
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Failed to submit feedback. Please try again.');
+            }
+        }
+
+        // Event listeners for feedback buttons
+        document.getElementById('relevantButton').addEventListener('click', () => submitFeedback(true));
+        document.getElementById('notRelevantButton').addEventListener('click', () => submitFeedback(false));
     </script>
 </body>
 </html>
