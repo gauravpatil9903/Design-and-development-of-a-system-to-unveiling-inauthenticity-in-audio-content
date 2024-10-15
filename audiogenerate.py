@@ -5,7 +5,7 @@ from gtts import gTTS
 import openai
 
 # Set your OpenAI API key
-# openai.api_key = 'sk-EGClQ5MzbvqBCILBAcxF0xRqupJyY8eh-pZLlSpojeT3BlbkFJAWs7PLB5kce0olXqvQ2KhTo0nLHxM4uG15gFBP1_gA'  # Replace with your actual API key
+
 
 # Function to fetch information from ChatGPT
 def fetch_info(subject):
