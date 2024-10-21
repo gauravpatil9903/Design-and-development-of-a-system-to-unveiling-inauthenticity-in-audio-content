@@ -12,6 +12,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.feature_extraction import text
 import re
 import string
+# from google.cloud import speech
 import os
 import base64
 import speech_recognition as sr
@@ -28,11 +29,72 @@ import joblib
 from functools import lru_cache
 import time 
 from fuzzywuzzy import fuzz
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from sklearn.model_selection import train_test_split
+import traceback
+import logging
+
+
 
 
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def create_rnn_model(vocab_size, embedding_dim, max_length):
+    model = Sequential([
+        Embedding(vocab_size, embedding_dim, input_length=max_length),
+        LSTM(64, return_sequences=True),
+        LSTM(32),
+        Dense(1, activation='sigmoid')
+    ])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+def load_or_create_rnn_model(vocab_size, embedding_dim, max_length):
+    model = create_rnn_model(vocab_size, embedding_dim, max_length)
+    if os.path.exists('path_to_rnn_weights.h5'):
+        model.load_weights('path_to_rnn_weights.h5')
+        print("Loaded pre-trained RNN weights")
+    else:
+        print("No pre-trained weights found. Using untrained model.")
+    return model
+
+# Global variables for tokenizer and model
+tokenizer = None
+rnn_model = None
+max_length = 100  # You may want to adjust this based on your data
+
+def train_rnn_model(texts, labels):
+    global tokenizer, rnn_model, max_length
+    
+    # Prepare the data
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(texts)
+    sequences = tokenizer.texts_to_sequences(texts)
+    max_length = max([len(seq) for seq in sequences])
+    padded_sequences = pad_sequences(sequences, maxlen=max_length)
+
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(padded_sequences, labels, test_size=0.2)
+
+    # Create and train the model
+    vocab_size = len(tokenizer.word_index) + 1
+    embedding_dim = 50
+    rnn_model = create_rnn_model(vocab_size, embedding_dim, max_length)
+
+    rnn_model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test))
+
+    # Save the trained model
+    rnn_model.save_weights('path_to_rnn_weights.h5')
+
+    print("Model trained and saved.")
 
 # Initialize BERT model for semantic search
 model = SentenceTransformer('paraphrase-MiniLM-L6-v2')# Required for session management
@@ -83,6 +145,8 @@ def update_csv_file(subject, information):
         writer.writerow([subject, information])
     # Update the in-memory dictionary
     csv_data[subject] = information
+
+
 
 def update_csv_file(subject, information):
     try:
@@ -422,73 +486,83 @@ def proceed():
 
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
+    global tokenizer, rnn_model, max_length
     start_time = time.time()
-    audio_file = request.files.get('audio')
-
-    if not audio_file:
-        return jsonify({"error": "No audio file received"}), 400
-
+    
     try:
-        print("1. Starting audio processing")
+        logger.info("Starting audio processing")
+        
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            logger.error("No audio file received")
+            return jsonify({"error": "No audio file received"}), 400
+
+        logger.info("Audio file received")
+
+        # Audio processing
         audio_file.seek(0)
         audio = AudioSegment.from_file(io.BytesIO(audio_file.read()))
         wav_audio = io.BytesIO()
         audio.export(wav_audio, format='wav')
         wav_audio.seek(0)
+        logger.info("Audio converted to WAV")
 
-        print("2. Audio converted to WAV")
+        # Speech recognition
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_audio) as source:
             audio_data = recognizer.record(source)
             audio_text = recognizer.recognize_google(audio_data)
+        logger.info("Speech recognition completed")
 
-        print("3. Speech recognition completed")
         audio_text = preprocess_text(audio_text)
-        print(f"Recognized Audio Text: {audio_text}")
-        
-        
+        logger.info(f"Recognized Audio Text: {audio_text}")
 
+        # Get subject from session
         subject = session.get('subject')
-        print(f"Subject from session: {subject}")
-
+        logger.info(f"Subject from session: {subject}")
         if not subject:
+            logger.error("No subject found in session")
             return jsonify({"error": "No subject found in session"}), 400
 
-        print("5. Fetching dataset content")
+        # Fetch dataset content
         dataset_content = fetch_information(subject)
-        if dataset_content.startswith("Error") or dataset_content.startswith("Disambiguation") or dataset_content.startswith("No Wikipedia page found"):
-            return jsonify({"error": dataset_content}), 404
+        if dataset_content is None or dataset_content.startswith("Error") or dataset_content.startswith("Disambiguation") or dataset_content.startswith("No Wikipedia page found"):
+            logger.error(f"Error fetching dataset content: {dataset_content}")
+            return jsonify({"error": dataset_content or "No relevant content found for the dataset"}), 404
+        logger.info("Dataset content fetched successfully")
 
-        print("4. Extracting keywords from audio")
+        # Extract keywords
         audio_keywords = extract_keywords_tfidf(audio_text)
-        print(f"Extracted keywords from audio: {audio_keywords}")
-
-        print("5. Fetching dataset content")
-        dataset_content = fetch_information(subject)
-        if dataset_content is None:
-            return jsonify({"error": "No relevant content found for the dataset"}), 404
-
-        print("6. Extracting keywords from dataset")
         dataset_keywords = extract_keywords_tfidf(dataset_content)
-        print(f"Extracted keywords from dataset: {dataset_keywords}")
+        logger.info(f"Extracted keywords from audio: {audio_keywords}")
+        logger.info(f"Extracted keywords from dataset: {dataset_keywords}")
 
-        print("7. Calculating accuracy")
+        # RNN processing
+        if rnn_model is None:
+            vocab_size = len(tokenizer.word_index) + 1 if tokenizer else 10000
+            embedding_dim = 50
+            rnn_model = load_or_create_rnn_model(vocab_size, embedding_dim, max_length)
+        logger.info("RNN model loaded or created")
+
+        if tokenizer is None:
+            tokenizer = Tokenizer()
+            tokenizer.fit_on_texts([audio_text])
+        sequences = tokenizer.texts_to_sequences([audio_text])
+        padded_sequence = pad_sequences(sequences, maxlen=max_length)
+        rnn_prediction = rnn_model.predict(padded_sequence)[0][0]
+        logger.info(f"RNN prediction: {rnn_prediction}")
+
+        # Calculate metrics
         accuracy = calculate_accuracy(audio_keywords, dataset_keywords)
-        
-        print("8. Calculating topic relevance")
         topic_relevance = calculate_topic_relevance(audio_text, dataset_content)
-        
-        print("9. Calculating time-aligned results")
         time_aligned_results = calculate_time_aligned_results(audio_text, dataset_keywords)
-        
-        print("10. Generating improvement suggestions")
         improvement_suggestions = generate_improvement_suggestions(accuracy, audio_keywords, dataset_keywords)
+        logger.info("All metrics calculated")
 
         end_time = time.time()
         processing_time = end_time - start_time
 
-        print("11. Preparing response")
-        return jsonify({
+        response_data = {
             "text": audio_text,
             "accuracy": accuracy,
             "dataset_keywords": dataset_keywords,
@@ -497,20 +571,42 @@ def process_audio():
             "topic_relevance": topic_relevance,
             "time_aligned_results": time_aligned_results,
             "improvement_suggestions": improvement_suggestions,
-            "processing_time": processing_time
-        }), 200
+            "processing_time": processing_time,
+            "rnn_coherence_score": float(rnn_prediction)
+        }
+        logger.info("Response prepared successfully")
+        return jsonify(response_data), 200
 
+    except sr.UnknownValueError:
+        logger.error("Speech recognition could not understand the audio")
+        return jsonify({"error": "Speech recognition could not understand the audio"}), 400
+    except sr.RequestError as e:
+        logger.error(f"Could not request results from speech recognition service; {e}")
+        return jsonify({"error": f"Could not request results from speech recognition service; {e}"}), 500
     except Exception as e:
-        print(f"Error processing audio: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"An error occurred while processing the audio: {str(e)}"}), 500
+        logger.error(f"Unexpected error occurred: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"An unexpected error occurred while processing the audio: {str(e)}"}), 500    
+
+
+@app.route('/train_model', methods=['POST'])
+def train_model():
+    data = request.json
+    texts = data.get('texts', [])
+    labels = data.get('labels', [])
+    
+    if not texts or not labels or len(texts) != len(labels):
+        return jsonify({"error": "Invalid training data"}), 400
+
+    train_rnn_model(texts, labels)
+    return jsonify({"message": "Model trained successfully"}), 200
+
 
 def calculate_topic_relevance(audio_text, dataset_content):
     vectorizer = TfidfVectorizer()
     tfidf_matrix = vectorizer.fit_transform([audio_text, dataset_content])
     cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-    return cosine_sim * 100  # Convert to percentage
+    return cosine_sim * 200  # Convert to percentage
 
 def calculate_time_aligned_results(audio_text, dataset_keywords):
     words = audio_text.split()
@@ -536,7 +632,7 @@ def generate_improvement_suggestions(accuracy, audio_keywords, dataset_keywords)
     if accuracy < 50:
         suggestions.append("Try to include more key terms related to the subject.")
     if len(set(audio_keywords) & set(dataset_keywords)) < len(dataset_keywords) / 2:
-        suggestions.append("Consider mentioning these keywords: " + ", ".join(set(dataset_keywords) - set(audio_keywords)))
+        suggestions.append("Consider mentioning more keywords related to {{subject}} like :" + ", ".join(set(audio_keywords)))
     if accuracy > 80:
         suggestions.append("Great job! Try to maintain this level of accuracy.")
     return suggestions
@@ -591,6 +687,6 @@ def update_feedback():
     return jsonify({"message": "Feedback received. Thank you!"})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5005)
     
     

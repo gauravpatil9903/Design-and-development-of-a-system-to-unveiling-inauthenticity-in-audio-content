@@ -1,509 +1,841 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Audio Recording</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            padding: 20px;
-            background-color: #f4f4f4;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      @import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap");
+
+      :root {
+        --primary-color: #3498db;
+        --secondary-color: #2ecc71;
+        --background-color: #ecf0f1;
+        --text-color: #34495e;
+        --accent-color: #e74c3c;
+      }
+
+      body {
+        font-family: "Roboto", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: var(--background-color);
+        color: var(--text-color);
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+      }
+
+      h1 {
+        color: var(--primary-color);
+        text-align: center;
+        margin-bottom: 30px;
+        font-weight: 700;
+      }
+
+      button {
+        padding: 12px 20px;
+        font-size: 16px;
+        margin: 10px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 500;
+      }
+
+      #recordButton {
+        background-color: var(--primary-color);
+        color: white;
+      }
+
+      #recordButton:hover {
+        background-color: #2673a7;
+      }
+
+      #stopButton {
+        background-color: var(--accent-color);
+        color: white;
+      }
+
+      #stopButton:hover {
+        background-color: #c0392b;
+      }
+
+      #uploadButton {
+        background-color: var(--secondary-color);
+        color: white;
+      }
+
+      #uploadButton:hover {
+        background-color: #27ae60;
+      }
+      .rsbtn,
+      .uploadfile {
+        display: flex;
+        justify-content: center; /* Centers horizontally */
+        align-items: center; /* Centers vertically */
+        height: 10vh; /* Full height viewport */
+      }
+      #results {
+        margin-top: 30px;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+      }
+
+      #loading {
+        display: none;
+        font-size: 18px;
+        color: var(--primary-color);
+        text-align: center;
+        margin: 20px 0;
+      }
+
+      #error-message {
+        color: var(--accent-color);
+        font-weight: bold;
+      }
+
+      #progressBar {
+        width: 100%;
+        height: 10px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+        margin-top: 20px;
+        overflow: hidden;
+      }
+
+      #progressBar div {
+        height: 100%;
+        background-color: var(--secondary-color);
+        transition: width 0.5s ease-in-out;
+      }
+
+      #visualizer {
+        width: 100%;
+        height: 150px;
+        background-color: #000;
+        margin-top: 20px;
+        border-radius: 8px;
+      }
+
+      #audioPlayback {
+        width: 100%;
+        margin-top: 20px;
+      }
+
+      .keyword {
+        background-color: rgba(255, 255, 0, 0.3);
+        font-weight: bold;
+        padding: 2px 4px;
+        border-radius: 3px;
+      }
+
+      #accuracyMeter {
+        width: 100%;
+        height: 20px;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        margin-top: 20px;
+        overflow: hidden;
+      }
+
+      #accuracyMeter div {
+        height: 100%;
+        transition: width 0.5s ease-in-out, background-color 0.5s ease-in-out;
+      }
+
+      #wikipediaPreview {
+        margin-top: 30px;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+      }
+
+      #spectrogram,
+      #topicRelevanceGraph,
+      #timeAlignedResults {
+        width: 100%;
+        height: 400px;
+        margin-top: 30px;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      #comparisonResults {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        margin-top: 30px;
+      }
+
+      .comparisonCard {
+        flex-basis: calc(50% - 20px);
+        border: 1px solid #ddd;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        background-color: #fff;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+      }
+
+      .comparisonCard:hover {
+        transform: translateY(-5px);
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 20px;
         }
-        button {
-            padding: 10px 15px;
-            font-size: 16px;
-            margin: 10px;
-        }
-        #results {
-            margin-top: 20px;
-            padding: 10px;
-            background: #fff;
-            border-radius: 5px;
-            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-        }
-        #loading {
-            display: none;
-            font-size: 18px;
-            color: #007bff;
-        }
-        #error-message {
-            color: red;
-        }
-        #progressBar {
-            width: 100%;
-            height: 20px;
-            background-color: #f0f0f0;
-            border-radius: 10px;
-            margin-top: 10px;
-        }
-        #progressBar div {
-            height: 100%;
-            background-color: #4CAF50;
-            border-radius: 10px;
-            width: 0;
-            transition: width 0.5s;
-        }
-        #visualizer {
-            width: 100%;
-            height: 100px;
-            background-color: #000;
-            margin-top: 10px;
-        }
-        #audioPlayback {
-            margin-top: 10px;
-        }
-        .keyword {
-            background-color: yellow;
-            font-weight: bold;
-        }
-        #accuracyMeter {
-            width: 200px;
-            height: 20px;
-            background-color: #f0f0f0;
-            border-radius: 10px;
-            margin-top: 10px;
-        }
-        #accuracyMeter div {
-            height: 100%;
-            border-radius: 10px;
-            width: 0;
-            transition: width 0.5s, background-color 0.5s;
-        }
-        #wikipediaPreview {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        #spectrogram, #topicRelevanceGraph, #timeAlignedResults {
-            width: 100%;
-            height: 300px;
-            margin-top: 20px;
-        }
-        #comparisonResults {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 20px;
-        }
+
         .comparisonCard {
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 5px;
+          flex-basis: 100%;
         }
-        #feedbackButtons {
-            margin-top: 20px;
+
+        h1 {
+          font-size: 24px;
         }
-        #feedbackButtons button {
-            margin-right: 10px;
+
+        button {
+          width: 100%;
+          margin: 10px 0;
+          font-size: 14px;
         }
-        #processingTime {
-            margin-top: 10px;
-            font-weight: bold;
-            color: #007bff;
+
+        #visualizer {
+          height: 100px;
         }
+
+        #spectrogram,
+        #topicRelevanceGraph,
+        #timeAlignedResults {
+          height: 250px;
+        }
+
+        #accuracyMeter,
+        #progressBar {
+          height: 8px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          padding: 10px;
+        }
+
+        h1 {
+          font-size: 20px;
+          margin-bottom: 20px;
+        }
+
+        button {
+          padding: 10px 15px;
+          font-size: 12px;
+        }
+
+        #results {
+          margin-top: 20px;
+          padding: 15px;
+        }
+
+        #visualizer {
+          height: 80px;
+        }
+
+        #spectrogram,
+        #topicRelevanceGraph,
+        #timeAlignedResults {
+          height: 200px;
+        }
+
+        .comparisonCard {
+          padding: 15px;
+        }
+      }
+
+      /* Animations */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      .fadeIn {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .pulse {
+        animation: pulse 2s infinite;
+      }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Recording Audio for Subject: {{ subject }}</h1>
-    <button id="recordButton">Start Recording</button>
-    <button id="stopButton" disabled>Stop Recording</button>
-    <div>
-        <h3>Or upload an audio file:</h3>
-        <input type="file" id="audioFileInput" accept=".mp3, .wav, .m4a">
-        <button id="uploadButton">Upload Audio File</button>
+    <div class="rsbtn">
+      <button id="recordButton">Start Recording</button>
+      <button id="stopButton" disabled>Stop Recording</button>
+    </div>
+
+    <h3 style="display: flex; justify-content: center; align-items: center">
+      Or upload an audio file:
+    </h3>
+    <div class="uploadfile">
+      <input type="file" id="audioFileInput" accept=".mp3, .wav, .m4a" />
+      <button id="uploadButton">Upload Audio File</button>
     </div>
     <div id="progressBar"><div></div></div>
     <canvas id="visualizer"></canvas>
     <div id="spectrogram"></div>
-    <audio id="audioPlayback" controls style="display: none;"></audio>
+    <audio id="audioPlayback" controls style="display: none"></audio>
     <div id="loading">Processing your audio...</div>
     <div id="results"></div>
-    
+
     <div id="accuracyMeter"><div></div></div>
     <div id="topicRelevanceGraph"></div>
     <div id="timeAlignedResults"></div>
     <div id="improvementSuggestions"></div>
     <div id="wikipediaPreview"></div>
     <div id="comparisonResults"></div>
-    <div id="feedbackButtons" style="display: none;">
-        <button id="relevantButton">Relevant</button>
-        <button id="notRelevantButton">Not Relevant</button>
+    <div id="historyChart" style="width: 100%; height: 400px"></div>
+    <div id="feedbackButtons" style="display: none">
+      <button id="relevantButton">Relevant</button>
+      <button id="notRelevantButton">Not Relevant</button>
     </div>
 
     <script>
-        let mediaRecorder;
-        let audioChunks = [];
-        let audioContext;
-        let analyser;
-        let canvas;
-        let canvasCtx;
-        let currentSubject = '{{ subject }}';
-        let currentContent = '';
+      let mediaRecorder;
+      let audioChunks = [];
+      let audioContext;
+      let analyser;
+      let canvas;
+      let canvasCtx;
+      let currentSubject = "{{ subject }}";
+      let currentContent = "";
 
-        document.getElementById('recordButton').onclick = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+      document.getElementById("recordButton").onclick = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        mediaRecorder = new MediaRecorder(stream);
 
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
 
-            canvas = document.getElementById('visualizer');
-            canvasCtx = canvas.getContext('2d');
+        canvas = document.getElementById("visualizer");
+        canvasCtx = canvas.getContext("2d");
 
-            visualize();
+        visualize();
 
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunks.push(event.data);
+        };
 
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                document.getElementById('audioPlayback').src = audioUrl;
-                document.getElementById('audioPlayback').style.display = 'block';
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          document.getElementById("audioPlayback").src = audioUrl;
+          document.getElementById("audioPlayback").style.display = "block";
 
-                const formData = new FormData();
-                formData.append('audio', audioBlob);
+          const formData = new FormData();
+          formData.append("audio", audioBlob);
 
-                updateProgress(0);
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('results').innerHTML = '';
+          updateProgress(0);
+          document.getElementById("loading").style.display = "block";
+          document.getElementById("results").innerHTML = "";
 
-                try {
-                    updateProgress(25);
-                    const response = await fetch('/process_audio', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    updateProgress(75);
-                    const result = await response.json();
-                    updateProgress(100);
-                    displayResults(result);
-                    
-                    // Get and display spectrogram
-                    const spectrogramResponse = await fetch('/get_audio_spectrum', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const spectrogramData = await spectrogramResponse.json();
-                    displaySpectrogram(spectrogramData);
-                } catch (error) {
-                    displayError("An error occurred while processing the audio.");
-                } finally {
-                    document.getElementById('loading').style.display = 'none';
+          try {
+            updateProgress(25);
+            const response = await fetch("/process_audio", {
+              method: "POST",
+              body: formData,
+            });
+            updateProgress(75);
+            const result = await response.json();
+            updateProgress(100);
+            displayResults(result);
+
+            // Get and display spectrogram
+            const spectrogramResponse = await fetch("/get_audio_spectrum", {
+              method: "POST",
+              body: formData,
+            });
+            const spectrogramData = await spectrogramResponse.json();
+            displaySpectrogram(spectrogramData);
+          } catch (error) {
+            displayError("An error occurred while processing the audio.");
+          } finally {
+            document.getElementById("loading").style.display = "none";
+          }
+        };
+
+        mediaRecorder.start();
+        document.getElementById("recordButton").disabled = true;
+        document.getElementById("stopButton").disabled = false;
+        audioChunks = [];
+      };
+
+      document.getElementById("stopButton").onclick = () => {
+        mediaRecorder.stop();
+        document.getElementById("recordButton").disabled = false;
+        document.getElementById("stopButton").disabled = true;
+      };
+
+      document.getElementById("uploadButton").onclick = async () => {
+        const fileInput = document.getElementById("audioFileInput");
+        const audioFile = fileInput.files[0];
+
+        if (!audioFile) {
+          displayError("Please select an audio file.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("audio", audioFile);
+
+        updateProgress(0);
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("results").innerHTML = "";
+
+        try {
+          updateProgress(25);
+          const response = await fetch("/process_audio", {
+            method: "POST",
+            body: formData,
+          });
+          updateProgress(75);
+          const result = await response.json();
+          updateProgress(100);
+          displayResults(result);
+
+          // Get and display spectrogram
+          const spectrogramResponse = await fetch("/get_audio_spectrum", {
+            method: "POST",
+            body: formData,
+          });
+          const spectrogramData = await spectrogramResponse.json();
+          displaySpectrogram(spectrogramData);
+        } catch (error) {
+          displayError("An error occurred while processing the audio.");
+        } finally {
+          document.getElementById("loading").style.display = "none";
+        }
+      };
+
+      async function processAudio(formData) {
+        updateProgress(0);
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("results").innerHTML = "";
+
+        try {
+          updateProgress(25);
+          const response = await fetch("/process_audio", {
+            method: "POST",
+            body: formData,
+          });
+          updateProgress(75);
+          const result = await response.json();
+          updateProgress(100);
+          displayResults(result);
+
+          // Get and display spectrogram
+          const spectrogramResponse = await fetch("/get_audio_spectrum", {
+            method: "POST",
+            body: formData,
+          });
+          const spectrogramData = await spectrogramResponse.json();
+          displaySpectrogram(spectrogramData);
+        } catch (error) {
+          displayError("An error occurred while processing the audio.");
+        } finally {
+          document.getElementById("loading").style.display = "none";
+        }
+      }
+
+      // Initialize arrays to store the history
+      let historyData = {
+        attempts: [],
+        accuracies: [],
+        relevances: [],
+      };
+
+      function updateHistoryChart() {
+        const chartDiv = document.getElementById("historyChart");
+
+        Plotly.newPlot(
+          chartDiv,
+          [
+            {
+              x: historyData.attempts,
+              y: historyData.accuracies,
+              type: "bar",
+              name: "Accuracy (%)",
+              marker: { color: "#00ff99" },
+            },
+            {
+              x: historyData.attempts,
+              y: historyData.relevances,
+              type: "bar",
+              name: "Topic Relevance (%)",
+              marker: { color: "#007bff" },
+            },
+          ],
+          {
+            title: "Accuracy and Topic Relevance Over Time",
+            barmode: "group",
+            xaxis: { title: "Attempts" },
+            yaxis: { title: "Percentage (%)", range: [0, 100] },
+          }
+        );
+      }
+
+      function displayResults(result) {
+        const resultsDiv = document.getElementById("results");
+        resultsDiv.innerHTML = "";
+
+        if (result.error) {
+          resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
+        } else {
+          // Save the results in the history
+          historyData.attempts.push(
+            `Attempt ${historyData.attempts.length + 1}`
+          );
+          historyData.accuracies.push(result.accuracy.toFixed(2));
+          historyData.relevances.push(result.topic_relevance.toFixed(2));
+
+          updateHistoryChart(); // Call this to refresh the chart
+
+          // Display the other details
+          const highlightedText = highlightKeywords(
+            result.text,
+            result.dataset_keywords
+          );
+          resultsDiv.innerHTML = `
+            <h2>Results:</h2>
+            <p><strong>Spoken Text:</strong> ${result.text}</p>
+            <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
+            <p><strong>Processing Time:</strong> ${result.processing_time.toFixed(
+              2
+            )} seconds</p>
+            <h3>Audio Keywords:</h3>
+            <p>${result.audio_keywords.join(", ")}</p>
+            <h3>Dataset Keywords:</h3>
+            <div id="datasetKeywords">
+                <p>${result.dataset_keywords.slice(0, 250).join(", ")}</p>
+                ${
+                  result.dataset_keywords.length > 250
+                    ? '<button onclick="toggleDatasetKeywords(result)">Show More</button>'
+                    : ""
                 }
-            };
+            </div>
+            <h3>Improvement Suggestions:</h3>
+            <div id="improvementSuggestions">
+                <ul>${result.improvement_suggestions
+                  .slice(0, 5)
+                  .map((s) => `<li>${s}</li>`)
+                  .join("")}</ul>
+                ${
+                  result.improvement_suggestions.length > 5
+                    ? '<button onclick="toggleImprovementSuggestions(result)">Show More</button>'
+                    : ""
+                }
+            </div>
+        `;
+          updateAccuracyMeter(result.accuracy);
+          displayWikipediaPreview(result.dataset_content);
+          displayTopicRelevanceGraph(result.topic_relevance);
+          displayTimeAlignedResults(result.time_aligned_results);
 
-            mediaRecorder.start();
-            document.getElementById('recordButton').disabled = true;
-            document.getElementById('stopButton').disabled = false;
-            audioChunks = [];
-        };
-
-        document.getElementById('stopButton').onclick = () => {
-            mediaRecorder.stop();
-            document.getElementById('recordButton').disabled = false;
-            document.getElementById('stopButton').disabled = true;
-        };
-
-        document.getElementById('uploadButton').onclick = async () => {
-            const fileInput = document.getElementById('audioFileInput');
-            const audioFile = fileInput.files[0];
-
-            if (!audioFile) {
-                displayError("Please select an audio file.");
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('audio', audioFile);
-
-            updateProgress(0);
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('results').innerHTML = '';
-
-            try {
-                updateProgress(25);
-                const response = await fetch('/process_audio', {
-                    method: 'POST',
-                    body: formData
-                });
-                updateProgress(75);
-                const result = await response.json();
-                updateProgress(100);
-                displayResults(result);
-                
-                // Get and display spectrogram
-                const spectrogramResponse = await fetch('/get_audio_spectrum', {
-                    method: 'POST',
-                    body: formData
-                });
-                const spectrogramData = await spectrogramResponse.json();
-                displaySpectrogram(spectrogramData);
-            } catch (error) {
-                displayError("An error occurred while processing the audio.");
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
-        };
-
-        async function processAudio(formData) {
-            updateProgress(0);
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('results').innerHTML = '';
-
-            try {
-                updateProgress(25);
-                const response = await fetch('/process_audio', {
-                    method: 'POST',
-                    body: formData
-                });
-                updateProgress(75);
-                const result = await response.json();
-                updateProgress(100);
-                displayResults(result);
-                
-                // Get and display spectrogram
-                const spectrogramResponse = await fetch('/get_audio_spectrum', {
-                    method: 'POST',
-                    body: formData
-                });
-                const spectrogramData = await spectrogramResponse.json();
-                displaySpectrogram(spectrogramData);
-            } catch (error) {
-                displayError("An error occurred while processing the audio.");
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
+          document.getElementById("feedbackButtons").style.display = "block";
+          currentContent = result.dataset_content;
         }
+      }
 
-        function displayResults(result) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-        
-            if (result.error) {
-                resultsDiv.innerHTML = `<p id="error-message">${result.error}</p>`;
-            } else {
-                const highlightedText = highlightKeywords(result.text, result.dataset_keywords);
-                resultsDiv.innerHTML = `
-                    <h2>Results:</h2>
-                    <p><strong>Audio Text:</strong> ${highlightedText}</p>
-                    <p><strong>Accuracy:</strong> ${result.accuracy.toFixed(2)}%</p>
-                    <p><strong>Processing Time:</strong> ${result.processing_time.toFixed(2)} seconds</p>
-                    <h3>Audio Keywords:</h3>
-                    <p>${result.audio_keywords.join(', ')}</p>
-                    <h3>Dataset Keywords:</h3>
-                    <p>${result.dataset_keywords.join(', ')}</p>
-                `;
-                updateAccuracyMeter(result.accuracy);
-                displayWikipediaPreview(result.dataset_content);
-                displayTopicRelevanceGraph(result.topic_relevance);
-                displayTimeAlignedResults(result.time_aligned_results);
-                displayImprovementSuggestions(result.improvement_suggestions);
-                updateComparisonResults(result);
-        
-                document.getElementById('feedbackButtons').style.display = 'block';
-                currentContent = result.dataset_content;
-            }
+      function toggleImprovementSuggestions(result) {
+        const suggestionsDiv = document.getElementById(
+          "improvementSuggestions"
+        );
+        const button = suggestionsDiv.querySelector("button");
+        const allSuggestions = result.improvement_suggestions;
+
+        // Check button state and toggle between showing full or partial list
+        if (button.textContent === "Show More") {
+          suggestionsDiv.innerHTML = `
+            <ul>${allSuggestions.map((s) => `<li>${s}</li>`).join("")}</ul>
+            <button onclick="toggleImprovementSuggestions(result)">Show Less</button>
+        `;
+        } else {
+          suggestionsDiv.innerHTML = `
+            <ul>${allSuggestions
+              .slice(0, 5)
+              .map((s) => `<li>${s}</li>`)
+              .join("")}</ul>
+            <button onclick="toggleImprovementSuggestions(result)">Show More</button>
+        `;
         }
+      }
 
+      function toggleDatasetKeywords(result) {
+        const keywordsDiv = document.getElementById("datasetKeywords");
+        const button = keywordsDiv.querySelector("button");
+        const allKeywords = result.dataset_keywords;
 
-        
-
-        function displaySpectrogram(data) {
-            const spectrogramDiv = document.getElementById('spectrogram');
-            Plotly.newPlot(spectrogramDiv, [{
-                z: data.spectrogram,
-                x: data.times,
-                y: data.frequencies,
-                type: 'heatmap',
-                colorscale: 'Viridis'
-            }], {
-                title: 'Audio Spectrogram',
-                xaxis: {title: 'Time'},
-                yaxis: {title: 'Frequency'}
-            });
+        if (button.textContent === "Show More") {
+          keywordsDiv.innerHTML = `
+            <p>${allKeywords.join(", ")}</p>
+            <button onclick="toggleDatasetKeywords(result)">Show Less</button>
+        `;
+        } else {
+          keywordsDiv.innerHTML = `
+            <p>${allKeywords.slice(0, 50).join(", ")}</p>
+            <button onclick="toggleDatasetKeywords(result)">Show More</button>
+        `;
         }
+      }
 
-        function displayTopicRelevanceGraph(relevance) {
-            const graphDiv = document.getElementById('topicRelevanceGraph');
-            Plotly.newPlot(graphDiv, [{
-                x: ['Topic Relevance'],
-                y: [relevance],
-                type: 'bar'
-            }], {
-                title: 'Topic Relevance',
-                yaxis: {range: [0, 100]}
-            });
-        }
+      function displaySpectrogram(data) {
+        const spectrogramDiv = document.getElementById("spectrogram");
+        Plotly.newPlot(
+          spectrogramDiv,
+          [
+            {
+              z: data.spectrogram,
+              x: data.times,
+              y: data.frequencies,
+              type: "heatmap",
+              colorscale: "Viridis",
+            },
+          ],
+          {
+            title: "Audio Spectrogram",
+            xaxis: { title: "Time" },
+            yaxis: { title: "Frequency" },
+          }
+        );
+      }
 
-        function displayTimeAlignedResults(results) {
-            const timeAlignedDiv = document.getElementById('timeAlignedResults');
-            const relevantWords = results.filter(r => r.relevance > 0);
-            Plotly.newPlot(timeAlignedDiv, [{
-                x: relevantWords.map(r => (r.start_time + r.end_time) / 2),
-                y: relevantWords.map(r => r.relevance),
-                text: relevantWords.map(r => r.word),
-                mode: 'markers+text',
-                type: 'scatter'
-            }], {
-                title: 'Time-Aligned Relevance',
-                xaxis: {title: 'Time (s)'},
-                yaxis: {title: 'Relevance'}
-            });
-        }
+      function displayTopicRelevanceGraph(relevance) {
+        const graphDiv = document.getElementById("topicRelevanceGraph");
+        Plotly.newPlot(
+          graphDiv,
+          [
+            {
+              x: ["Topic Relevance"],
+              y: [relevance],
+              type: "bar",
+            },
+          ],
+          {
+            title: "Topic Relevance",
+            yaxis: { range: [0, 100] },
+          }
+        );
+      }
 
-        function displayImprovementSuggestions(suggestions) {
-            const suggestionsDiv = document.getElementById('improvementSuggestions');
-            suggestionsDiv.innerHTML = '<h3>Improvement Suggestions:</h3><ul>' + 
-                suggestions.map(s => `<li>${s}</li>`).join('') + '</ul>';
-        }
+      function displayTimeAlignedResults(results) {
+        const timeAlignedDiv = document.getElementById("timeAlignedResults");
+        const relevantWords = results.filter((r) => r.relevance > 0);
+        Plotly.newPlot(
+          timeAlignedDiv,
+          [
+            {
+              x: relevantWords.map((r) => (r.start_time + r.end_time) / 2),
+              y: relevantWords.map((r) => r.relevance),
+              text: relevantWords.map((r) => r.word),
+              mode: "markers+text",
+              type: "scatter",
+            },
+          ],
+          {
+            title: "Time-Aligned Relevance",
+            xaxis: { title: "Time (s)" },
+            yaxis: { title: "Relevance" },
+          }
+        );
+      }
 
-        function updateComparisonResults(result) {
-            const comparisonDiv = document.getElementById('comparisonResults');
-            const newCard = document.createElement('div');
-            newCard.className = 'comparisonCard';
-            newCard.innerHTML = `
+      function displayImprovementSuggestions(suggestions) {
+        const suggestionsDiv = document.getElementById(
+          "improvementSuggestions"
+        );
+        suggestionsDiv.innerHTML =
+          "<h3>Improvement Suggestions:</h3><ul>" +
+          suggestions.map((s) => `<li>${s}</li>`).join("") +
+          "</ul>";
+      }
+
+      function updateComparisonResults(result) {
+        const comparisonDiv = document.getElementById("comparisonResults");
+        const newCard = document.createElement("div");
+        newCard.className = "comparisonCard";
+        newCard.innerHTML = `
                 <h3>Attempt ${comparisonDiv.childElementCount + 1}</h3>
                 <p>Accuracy: ${result.accuracy.toFixed(2)}%</p>
                 <p>Topic Relevance: ${result.topic_relevance.toFixed(2)}%</p>
             `;
-            comparisonDiv.appendChild(newCard);
-        }
+        comparisonDiv.appendChild(newCard);
+      }
 
-        function displayError(message) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = `<p id="error-message">${message}</p>`;
-        }
+      function displayError(message) {
+        const resultsDiv = document.getElementById("results");
+        resultsDiv.innerHTML = `<p id="error-message">${message}</p>`;
+      }
 
-        function updateProgress(percentage) {
-            const progressBar = document.getElementById('progressBar').firstChild;
-            progressBar.style.width = percentage + '%';
-        }
+      function updateProgress(percentage) {
+        const progressBar = document.getElementById("progressBar").firstChild;
+        progressBar.style.width = percentage + "%";
+      }
 
-        function visualize() {
-            const WIDTH = canvas.width;
-            const HEIGHT = canvas.height;
+      function visualize() {
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
 
-            analyser.fftSize = 2048;
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
+        analyser.fftSize = 2048;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
 
-            canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+        canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
 
-            function draw() {
-                const drawVisual = requestAnimationFrame(draw);
+        function draw() {
+          const drawVisual = requestAnimationFrame(draw);
 
-                analyser.getByteTimeDomainData(dataArray);
+          analyser.getByteTimeDomainData(dataArray);
 
-                canvasCtx.fillStyle = 'rgb(200, 200, 200)';
-                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+          canvasCtx.fillStyle = "rgb(200, 200, 200)";
+          canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
 
-                canvasCtx.lineWidth = 2;
-                canvasCtx.strokeStyle = 'rgb(0, 0, 0)';
+          canvasCtx.lineWidth = 2;
+          canvasCtx.strokeStyle = "rgb(0, 0, 0)";
 
-                canvasCtx.beginPath();
+          canvasCtx.beginPath();
 
-                const sliceWidth = WIDTH * 1.0 / bufferLength;
-                let x = 0;
+          const sliceWidth = (WIDTH * 1.0) / bufferLength;
+          let x = 0;
 
-                for (let i = 0; i < bufferLength; i++) {
-                    const v = dataArray[i] / 128.0;
-                    const y = v * HEIGHT / 2;
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = (v * HEIGHT) / 2;
 
-                    if (i === 0) {
-                        canvasCtx.moveTo(x, y);
-                    } else {
-                        canvasCtx.lineTo(x, y);
-                    }
-
-                    x += sliceWidth;
-                }
-
-                canvasCtx.lineTo(canvas.width, canvas.height / 2);
-                canvasCtx.stroke();
-            }
-
-            draw();
-        }
-
-        function highlightKeywords(text, keywords) {
-            let highlightedText = text;
-            keywords.forEach(keyword => {
-                const regex = new RegExp(keyword, 'gi');
-                highlightedText = highlightedText.replace(regex, match => `<span class="keyword">${match}</span>`);
-            });
-            return highlightedText;
-        }
-
-        function updateAccuracyMeter(accuracy) {
-            const meter = document.getElementById('accuracyMeter').firstChild;
-            meter.style.width = accuracy + '%';
-            if (accuracy < 50) {
-                meter.style.backgroundColor = 'red';
-            } else if (accuracy < 80) {
-                meter.style.backgroundColor = 'yellow';
+            if (i === 0) {
+              canvasCtx.moveTo(x, y);
             } else {
-                meter.style.backgroundColor = 'green';
+              canvasCtx.lineTo(x, y);
             }
+
+            x += sliceWidth;
+          }
+
+          canvasCtx.lineTo(canvas.width, canvas.height / 2);
+          canvasCtx.stroke();
         }
 
-        function displayWikipediaPreview(content) {
-            const previewDiv = document.getElementById('wikipediaPreview');
-            previewDiv.innerHTML = `
+        draw();
+      }
+
+      function highlightKeywords(text, keywords) {
+        let highlightedText = text;
+        keywords.forEach((keyword) => {
+          const regex = new RegExp(keyword, "gi");
+          highlightedText = highlightedText.replace(
+            regex,
+            (match) => `<span class="keyword">${match}</span>`
+          );
+        });
+        return highlightedText;
+      }
+
+      function updateAccuracyMeter(accuracy) {
+        const meter = document.getElementById("accuracyMeter").firstChild;
+        meter.style.width = accuracy + "%";
+        if (accuracy < 50) {
+          meter.style.backgroundColor = "red";
+        } else if (accuracy < 80) {
+          meter.style.backgroundColor = "yellow";
+        } else {
+          meter.style.backgroundColor = "green";
+        }
+      }
+
+      function displayWikipediaPreview(content) {
+        const previewDiv = document.getElementById("wikipediaPreview");
+        previewDiv.innerHTML = `
                 <h3>Wikipedia Preview:</h3>
                 <p>${content.substring(0, 300)}...</p>
                 <button onclick="toggleWikipediaPreview()">Show More</button>
             `;
-        }
+      }
 
-        function toggleWikipediaPreview() {
-            const previewDiv = document.getElementById('wikipediaPreview');
-            const button = previewDiv.querySelector('button');
-            if (button.textContent === 'Show More') {
-                previewDiv.innerHTML = `
+      function toggleWikipediaPreview() {
+        const previewDiv = document.getElementById("wikipediaPreview");
+        const button = previewDiv.querySelector("button");
+        if (button.textContent === "Show More") {
+          previewDiv.innerHTML = `
                     <h3>Wikipedia Preview:</h3>
                     <p>${currentContent}</p>
                     <button onclick="toggleWikipediaPreview()">Show Less</button>
                 `;
-            } else {
-                displayWikipediaPreview(currentContent);
-            }
+        } else {
+          displayWikipediaPreview(currentContent);
         }
+      }
 
-        // New function to handle user feedback
-        async function submitFeedback(isRelevant) {
-            try {
-                const response = await fetch('/update_feedback', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        subject: currentSubject,
-                        content: currentContent,
-                        is_relevant: isRelevant
-                    }),
-                });
-                const result = await response.json();
-                alert(result.message);
-            } catch (error) {
-                console.error('Error submitting feedback:', error);
-                alert('Failed to submit feedback. Please try again.');
-            }
+      // New function to handle user feedback
+      async function submitFeedback(isRelevant) {
+        try {
+          const response = await fetch("/update_feedback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subject: currentSubject,
+              content: currentContent,
+              is_relevant: isRelevant,
+            }),
+          });
+          const result = await response.json();
+          alert(result.message);
+        } catch (error) {
+          console.error("Error submitting feedback:", error);
+          alert("Failed to submit feedback. Please try again.");
         }
+      }
 
-        // Event listeners for feedback buttons
-        document.getElementById('relevantButton').addEventListener('click', () => submitFeedback(true));
-        document.getElementById('notRelevantButton').addEventListener('click', () => submitFeedback(false));
+      // Event listeners for feedback buttons
+      document
+        .getElementById("relevantButton")
+        .addEventListener("click", () => submitFeedback(true));
+      document
+        .getElementById("notRelevantButton")
+        .addEventListener("click", () => submitFeedback(false));
     </script>
-</body>
+  </body>
 </html>
